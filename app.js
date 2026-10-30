@@ -102,6 +102,13 @@
   function idsErrados() {
     return Object.keys(E.ultima).filter((id) => PERGUNTAS[id] && !E.ultima[id].certa);
   }
+  function emCurso(n) {
+    const t = E.dias[n] && E.dias[n].tentativa;
+    return !!(t && !t.terminada);
+  }
+  function guardarMelhor(e, certas, total) {
+    if (!e.melhor || pct(certas, total) > pct(e.melhor.certas, e.melhor.total) || (e.melhor.total === 0 && total > 0)) e.melhor = { certas, total };
+  }
   function registarResposta(p, resposta) {
     E.ultima[p.id] = { resposta, certa: eCerta(p, resposta) };
   }
@@ -236,15 +243,15 @@
     const d = DIAS[n];
     const s = E.dias[n] || { estado: 'por-fazer' };
     let estado = '⬜ Por fazer';
-    if (s.estado === 'comecado') estado = '🟡 Começado';
-    if (s.estado === 'feito') estado = '✅ Feito' + (s.melhor && s.melhor.total ? ' <strong>' + s.melhor.certas + '/' + s.melhor.total + '</strong>' : '');
+    if (s.estado === 'comecado') estado = '🟡 Começado' + (s.melhor && s.melhor.total ? ' · melhor nota ' + s.melhor.certas + '/' + s.melhor.total : '');
+    if (s.estado === 'feito') estado = '✅ Feito' + (s.melhor && s.melhor.total ? ' <strong>' + s.melhor.certas + '/' + s.melhor.total + '</strong>' : '') + (emCurso(n) ? ' · 🟡 A refazer' : '');
     const corCirc = d.lei === 'TODAS' ? '#777777' : cor(d.lei);
     const estrelas = s.estado === 'feito' && s.estrelas ? '<div class="estrelas">' + '⭐'.repeat(s.estrelas) + '</div>' : '';
     return '<a class="dia' + (ehHoje ? ' hoje' : '') + '" id="dia-' + n + '" href="#/dia/' + n + '">' +
       '<div class="circ" style="background:' + corCirc + '">' + n + '</div>' +
       '<div class="info">' + (ehHoje ? '<span class="etiqueta">Hoje</span> ' : '') +
       '<div class="tema">' + esc(semMd(d.tema)) + '</div><div class="estado">' + estado + '</div></div>' + estrelas +
-      (ehHoje ? '<span class="btn">Começar</span>' : '') + '</a>';
+      (ehHoje ? '<span class="btn">' + (emCurso(n) ? 'Continuar' : 'Começar') + '</span>' : '') + '</a>';
   }
 
   function exportar() {
@@ -345,6 +352,7 @@
   }
 
   function comecarRevisao() {
+    if (emCurso(38)) return ir('#/teste/38');
     const errados = idsErrados();
     if (!errados.length) return ir('#/dia/38');
     const e = ed(38);
@@ -400,6 +408,7 @@
       const certa = eCerta(p, escolha);
       if (p.tipo === 'numero') {
         const c = document.getElementById('numero');
+        c.disabled = true;
         c.classList.add(certa ? 'certa' : 'errada');
         if (animar) c.classList.add(certa ? 'alegria' : 'abana');
       } else {
@@ -420,7 +429,7 @@
       document.getElementById('continuar').onclick = continuar;
     }
     function verificar() {
-      if (!escolha) return;
+      if (!escolha || Object.prototype.hasOwnProperty.call(t.respostas, p.id)) return;
       t.respostas[p.id] = escolha;
       registarResposta(p, escolha);
       guardar();
@@ -433,6 +442,7 @@
           const e = ed(n);
           const certas = t.ids.filter((id) => eCerta(PERGUNTAS[id], t.respostas[id])).length;
           t.nota = { certas, total };
+          guardarMelhor(e, certas, total);
           if (!e.pontosGanhos && n !== 38) { e.pontosGanhos = true; E.pontos += certas; t.pontosNovos = certas; }
           guardar();
           ir('#/resultados/' + n);
@@ -545,7 +555,7 @@
     const e = ed(n);
     e.estado = 'feito';
     e.nota = { certas, total };
-    if (!e.melhor || pct(certas, total) > pct(e.melhor.certas, e.melhor.total) || (e.melhor.total === 0 && total > 0)) e.melhor = { certas, total };
+    guardarMelhor(e, certas, total);
     e.estrelas = estrelasDe(e.melhor.certas, e.melhor.total);
     e.feitoEm = hoje();
     if (e.tentativa) e.respostas = e.tentativa.respostas;
@@ -573,7 +583,7 @@
     h += '<div class="cartao cinza"><div style="margin-bottom:8px">Lei com mais erros: <strong>' + esc(pior === 'TODAS' ? 'Índices' : nomeLei(pior)) + '</strong> (' + grupos[pior].length + ')</div><div class="barras-lei">' +
       ordem.map((l) => '<div class="l"><span class="n">' + esc(l === 'TODAS' ? 'Índices' : nomeLei(l)) + '</span><div class="b"><div data-w="' + pct(grupos[l].length, max) + '%" style="background:' + cor(l) + '"></div></div><span class="c">' + grupos[l].length + '</span></div>').join('') +
       '</div></div>';
-    h += '<div class="btns" style="margin:16px 0 8px"><button class="btn" id="refazer">Refazer todas as erradas</button></div>';
+    h += '<div class="btns" style="margin:16px 0 8px"><button class="btn" id="refazer">' + (emCurso(38) ? 'Continuar a revisão' : 'Refazer todas as erradas') + '</button></div>';
     for (const l of ordem) {
       h += '<section class="unidade"><div class="unidade-cab" style="background:' + cor(l) + '"><div class="u-nome">' + esc(l === 'TODAS' ? 'Índices' : nomeLei(l)) + '</div><div class="u-info">' + grupos[l].length + ' erradas</div></div>';
       const lista = grupos[l].slice().sort((a, b) => PERGUNTAS[a].dia - PERGUNTAS[b].dia || a.localeCompare(b, undefined, { numeric: true }));
